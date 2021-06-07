@@ -1,0 +1,15 @@
+//because windows sucks...
+
+#ifndef PROGRAMCONFIGQTGSO_CROSSPLATFORMMACROS_HPP
+#define PROGRAMCONFIGQTGSO_CROSSPLATFORMMACROS_HPP
+
+#include <QtCore/QtGlobal>
+
+//remember to define this variable in the .pro file
+#if defined(PROGRAMCONFIGQTGSO_LIBRARY)
+#  define EXPIMP_PROGRAMCONFIGQTGSO Q_DECL_EXPORT
+#else
+#  define EXPIMP_PROGRAMCONFIGQTGSO Q_DECL_IMPORT
+#endif
+
+#endif // ESSENTIALQTSO_CROSSPLATFORMMACROS_HPP
