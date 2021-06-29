@@ -1,10 +1,16 @@
 #include "programConfigGUI.hpp"
 
 #include "essentialQtso/enumClass.hpp"
+#include "signalProxyQtso/signalProxyQtso.hpp"
+#include "comuso/practicalTemplates.hpp"
 
 #include <QMessageBox>
 #include <QJsonArray>
 #include <QWidget>
+
+#include <csignal>
+#include <unordered_set>
+#include <iterator>
 
 void programConfigGUI_c::readJSON_f(const QJsonObject& json_par_con)
 {
@@ -164,6 +170,16 @@ programConfigGUI_c::programConfigGUI_c(QObject* parent_par)
 {
 }
 
+programConfigGUI_c::programConfigGUI_c(QWidget *mainWindow_par)
+    : programConfig_c(mainWindow_par)
+    , mainWindow_pri(mainWindow_par)
+{
+    if (mainWindow_par not_eq nullptr)
+    {
+        QObject::connect(signalso::signalProxy_ptr_ext, &signalso::signalProxy_c::signalTriggered_signal, this, &programConfigGUI_c::OSSignalRecieved_f);
+    }
+}
+
 QByteArray programConfigGUI_c::widgetGeometry_f(const QString& key_par_con) const
 {
     return widgetGeometryUMap_pri.value(key_par_con);
@@ -192,25 +208,58 @@ std::vector<QString> programConfigGUI_c::directoryHistory_f(const QString& fileD
     return historyVector;
 }
 
-void programConfigGUI_c::addDirectoryHistory_f(const QString& fileDialogStringId_par_con, const QString& directory_par_con)
+template <typename T>
+void trimMap_f(T& container, const uint_fast64_t size_par_con)
 {
-    int_fast64_t nowTmp(std::chrono::steady_clock::now().time_since_epoch().count());
+    if (static_cast<uint_fast64_t>(container.size()) > size_par_con)
+    {
+        uint_fast64_t lastItemKeyTmp(container.firstKey());
+        container.remove(lastItemKeyTmp);
+    }
+}
+
+bool programConfigGUI_c::addDirectoryHistory_f(const QString& fileDialogStringId_par_con, const QString& directory_par_con)
+{
+    bool resultTmp(false);
+    //if the widget has already an stored setting
     if (fileDialogNameToDirectoryNameAndTimeMap_pri.count(fileDialogStringId_par_con) > 0)
     {
+        QHash<QString, QMap<int_fast64_t, QString>>::iterator accessTimeToDirectoryMapTmp(fileDialogNameToDirectoryNameAndTimeMap_pri.find(fileDialogStringId_par_con));
+        //detect duplicates, this function is "slow" but it's a 10 items QMap
+        uint_fast64_t keyFromValueTmp(accessTimeToDirectoryMapTmp->key(directory_par_con, 0));
+        while (keyFromValueTmp not_eq 0)
+        {
+            accessTimeToDirectoryMapTmp->remove(keyFromValueTmp);
+            keyFromValueTmp = accessTimeToDirectoryMapTmp->key(directory_par_con, 0);
+        }
 
+        int_fast64_t nowTmp(std::chrono::steady_clock::now().time_since_epoch().count());
+        accessTimeToDirectoryMapTmp->insert(nowTmp, directory_par_con);
+        trimMap_f(*accessTimeToDirectoryMapTmp, pathHistoryMaxItems_pri);
+        resultTmp = true;
     }
     else
     {
         QMap<int_fast64_t, QString> accessTimeToDirectoryMapTmp;
+        int_fast64_t nowTmp(std::chrono::steady_clock::now().time_since_epoch().count());
+        accessTimeToDirectoryMapTmp.insert(nowTmp, directory_par_con);
         fileDialogNameToDirectoryNameAndTimeMap_pri.insert(fileDialogStringId_par_con, accessTimeToDirectoryMapTmp);
+        trimMap_f(accessTimeToDirectoryMapTmp, pathHistoryMaxItems_pri);
+        resultTmp = true;
     }
 
-    QHash<QString, QMap<int_fast64_t, QString>>::iterator accessTimeToDirectoryMapTmp(fileDialogNameToDirectoryNameAndTimeMap_pri.find(fileDialogStringId_par_con));
-    accessTimeToDirectoryMapTmp->insert(nowTmp, directory_par_con);
+    return resultTmp;
+}
 
-    if (accessTimeToDirectoryMapTmp->size() > 10)
-    {
-        uint_fast64_t lastItemKeyTmp(accessTimeToDirectoryMapTmp->firstKey());
-        accessTimeToDirectoryMapTmp->remove(lastItemKeyTmp);
-    }
+void programConfigGUI_c::OSSignalRecieved_f(int signal_par)
+{
+    QMessageBox* informationMessageBoxPtrTmp(new QMessageBox(mainWindow_pri));
+    informationMessageBoxPtrTmp->setAttribute(Qt::WA_DeleteOnClose);
+    informationMessageBoxPtrTmp->setWindowTitle(translate_f("Warning"));
+    text_c textTmp("OS signal {0} received, proceeding to close the program", signal_par);
+    informationMessageBoxPtrTmp->setText(translateAndReplace_f(textTmp));
+    informationMessageBoxPtrTmp->setModal(Qt::WindowModal);
+
+    QObject::connect(informationMessageBoxPtrTmp, &QMessageBox::finished, mainWindow_pri, &QWidget::close);
+    informationMessageBoxPtrTmp->show();
 }
